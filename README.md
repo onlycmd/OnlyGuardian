@@ -68,7 +68,7 @@ Ayrıca projeyi **Fork**'layarak kendi özelliklerini ekleyebilir ve topluluğa 
 
 1.  **Clone the Repo / Depoyu Klonla:**
     ```bash
-    git clone https://github.com/yourusername/OnlyGuardian.git
+    git clone https://github.com/onlycmd/OnlyGuardian.git
     cd OnlyGuardian
     ```
 
@@ -98,3 +98,4 @@ Ayrıca projeyi **Fork**'layarak kendi özelliklerini ekleyebilir ve topluluğa 
 
 ---
 *OnlyGuardian - Your Server's Strongest Shield / Sunucun İçin En Güçlü Kalkan.*
+
