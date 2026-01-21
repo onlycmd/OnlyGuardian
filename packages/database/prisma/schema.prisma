@@ -1,0 +1,189 @@
+// OnlyGuardian Prisma Şeması
+// Bu dosya veritabanı mimarisini ve indekslemeleri tanımlar.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tehdit Seviyeleri
+enum ThreatLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Olay Durumları
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  FALSE_POSITIVE
+}
+
+// Sunucu Modeli
+model Guild {
+  id                String   @id // Discord Sunucu ID
+  name              String
+  icon              String?
+  ownerId           String
+  
+  // Ayarlar
+  prefix            String   @default("!")
+  language          String   @default("tr")
+  isPremium         Boolean  @default(false)
+  
+  // Güvenlik Modülleri Durumu
+  antiRaidEnabled      Boolean @default(true)
+  antiPhishingEnabled  Boolean @default(true)
+  shadowBanEnabled     Boolean @default(true)
+  auditLogSyncEnabled  Boolean @default(true)
+  
+  // Self-Healing (Kendi Kendini Onarma) Verileri
+  botPermissions    Json?    // Botun sahip olduğu yetkilerin anlık kopyası
+  lastHealthCheck   DateTime @default(now())
+  hasError          Boolean  @default(false)
+  lastErrorMessage  String?
+
+  // İlişkiler
+  logs              AuditLog[]
+  threats           Threat[]
+  incidents         Incident[]
+  shadowBannedUsers ShadowBan[]
+  settings          GuildSettings?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// Sunucuya Özel Hassas Ayarlar
+model GuildSettings {
+  id              String @id @default(cuid())
+  guildId         String @unique
+  guild           Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  logChannelId    String? // Logların aynalanacağı kanal
+  alertChannelId  String? // Kritik tehdit uyarı kanalı
+  quarantineRoleId String? // Şüpheli kullanıcıların atılacağı rol
+  
+  // Eşik Değerleri (Anomali Tespiti İçin)
+  raidThreshold   Int    @default(10) // Dakikada giriş sınırı
+  spamThreshold   Int    @default(5)  // 5 saniyede mesaj sınırı
+}
+
+// Kullanıcı Modeli (Global Tehdit Puanı Takibi)
+model User {
+  id            String   @id // Discord Kullanıcı ID
+  username      String
+  avatar        String?
+  
+  // Global Güvenlik Skoru (SIEM mantığı: Farklı sunuculardaki davranışlar)
+  globalThreatScore Int  @default(0)
+  isSystemAdmin     Boolean @default(false)
+
+  logs          AuditLog[]
+  threats       Threat[]
+  shadowBans    ShadowBan[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Audit Log Mirroring (Discord'un 90 günlük sınırını aşmak için)
+model AuditLog {
+  id            String   @id @default(cuid())
+  guildId       String
+  guild         Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  
+  action        String   // Örn: "MEMBER_BAN", "MESSAGE_DELETE"
+  targetId      String?
+  reason        String?
+  changes       Json?    // Değişen verilerin JSON hali
+  
+  executorId    String?  // İşlemi yapan yetkili
+  
+  // Discord'dan gelen orijinal log ID'si (Mükerrer kaydı önlemek için)
+  discordLogId  String?  @unique 
+  
+  createdAt     DateTime @default(now())
+
+  // Performans için kritik indeksler
+  @@index([guildId, createdAt])
+  @@index([userId])
+  @@index([action])
+}
+
+// Tehdit Analiz Verileri
+model Threat {
+  id            String      @id @default(cuid())
+  guildId       String
+  guild         Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  
+  type          String      // Örn: "PHISHING", "SPAM", "RAID_ATTEMPT"
+  level         ThreatLevel @default(MEDIUM)
+  description   String
+  evidence      Json?       // Kanıt verileri (Mesaj içeriği, IP vb.)
+  
+  incidentId    String?
+  incident      Incident?   @relation(fields: [incidentId], references: [id])
+
+  createdAt     DateTime    @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([userId])
+  @@index([type])
+}
+
+// Olay Yönetimi (Incident Management)
+model Incident {
+  id            String         @id @default(cuid())
+  guildId       String
+  guild         Guild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String
+  status        IncidentStatus @default(OPEN)
+  severity      ThreatLevel    @default(MEDIUM)
+  
+  threats       Threat[]
+  
+  assignedTo    String?        // Atanan admin ID
+  
+  resolvedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([guildId, status])
+}
+
+// Shadow Ban Sistemi
+model ShadowBan {
+  id            String   @id @default(cuid())
+  guildId       String
+  guild         Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  reason        String?
+  expiresAt     DateTime?
+  
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@unique([guildId, userId])
+  @@index([userId])
+}

@@ -1,0 +1,14 @@
+{
+    "name": "@onlyguardian/bot",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "src/index.js",
+    "dependencies": {
+        "discord.js": "^14.14.1",
+        "dotenv": "^16.4.1",
+        "bullmq": "^5.1.1",
+        "ioredis": "^5.3.2",
+        "jsonwebtoken": "^9.0.2",
+        "@prisma/client": "latest"
+    }
+}
